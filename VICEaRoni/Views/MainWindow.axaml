@@ -1,0 +1,80 @@
+﻿<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:dock="using:Dock.Avalonia.Controls"
+        xmlns:dockFactory="using:Dock.Model.Avalonia"
+        xmlns:dockModel="using:Dock.Model.Avalonia.Controls"
+        xmlns:vm="using:VICEaRoni.ViewModels"
+        xmlns:views="using:VICEaRoni.Views"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Name="RootWindow"
+        x:Class="VICEaRoni.Views.MainWindow"
+        x:DataType="vm:MainViewModel"
+        Icon="/Assets/avalonia-logo.ico"
+        Title="Welcome to VICE-a-Roni">
+
+    <Design.DataContext>
+        <!-- This only sets the DataContext for the previewer in an IDE,
+             to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
+        <vm:MainViewModel />
+    </Design.DataContext>
+
+    <Window.KeyBindings>
+        <KeyBinding Gesture="Ctrl+Cancel" Command="{Binding BreakCommand}"/>
+    </Window.KeyBindings>
+
+    <DockPanel>
+        <Menu DockPanel.Dock="Top" FontSize="14" Margin="-3">
+            <MenuItem Header="_File">
+                <MenuItem Header="_Open..." Command="{Binding OpenCommand}" />
+                <MenuItem Header="_Save" Command="{Binding SaveCommand}" InputGesture="Ctrl+S"/>
+                <Separator />
+                <MenuItem Header="_Exit" Command="{Binding ExitCommand}" />
+            </MenuItem>
+
+            <MenuItem Header="_View">
+                <MenuItem Header="New Command Window" />
+                <MenuItem Header="New Disassembly Window" />
+                <MenuItem Header="New Memory Dump" />
+            </MenuItem>
+
+            <MenuItem Header="_Monitor">
+                <MenuItem Header="_Connect" Command="{Binding ConnectCommand}" />
+                <MenuItem Header="_Break" Command="{Binding BreakCommand}" />
+            </MenuItem>
+        </Menu>
+
+        <Border DockPanel.Dock="Bottom" Background="#F8F8F8" Padding="8,4" BorderBrush="LightGray"
+                VerticalAlignment="Center">
+            <StackPanel>
+                <TextBlock Text="{Binding StatusMessage}"></TextBlock>
+            </StackPanel>
+        </Border>
+
+        <DockControl x:Name="Dock" InitializeLayout="True" InitializeFactory="True">
+            <DockControl.Factory>
+                <Factory />
+            </DockControl.Factory>
+            <RootDock>
+                <ProportionalDock Orientation="Horizontal">
+                    <ToolDock>
+                        <Tool Title="Thing 1">
+                            <Tool.Content>
+                                <views:ConsoleView DataContext="{Binding #RootWindow.((vm:MainViewModel)DataContext).Console}"/>
+                            </Tool.Content>
+                        </Tool>
+                    </ToolDock>
+                    <ProportionalDockSplitter></ProportionalDockSplitter>
+                    <ToolDock>
+                        <Tool Title="Thing 2">
+                            <Tool.Content>
+                                <views:ConsoleView DataContext="{Binding #RootWindow.((vm:MainViewModel)DataContext).Console2}"/>
+                            </Tool.Content>
+                        </Tool>
+                    </ToolDock>
+                </ProportionalDock>
+            </RootDock>
+        </DockControl>
+    </DockPanel>
+</Window>

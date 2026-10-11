@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="MonitorControl/MonitorControl.csproj" Id="53ebc5e1-bc73-4571-90dc-8f289b10b035" />
+  <Project Path="VICEaRoni/VICEaRoni.csproj" />
+  <Project Path="VICEBinaryMonitor/VICEBinaryMonitor.csproj" />
+</Solution>

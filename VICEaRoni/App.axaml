@@ -1,5 +1,8 @@
 ﻿<Application xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dock="using:Dock.Avalonia.Controls"
+             xmlns:dockModel="using:Dock.Model.Avalonia.Controls"
+             xmlns:vm="using:VICEaRoni.ViewModels"
              x:Class="VICEaRoni.App"
              RequestedThemeVariant="Default">
              <!-- "Default" ThemeVariant follows system theme variant. "Dark" or "Light" are other available options. -->
@@ -8,5 +11,57 @@
         <FluentTheme />
         <!--<FluentTheme Mode="Dark" />-->
         <DockFluentTheme />
+
+        <Style Selector="dock|ToolChromeControl">
+            <Setter Property="ToolFlyout">
+                <Flyout>
+                    <StackPanel>
+                        <ContentControl x:DataType="dockModel:ToolDock" Content="{Binding ActiveDockable.Context}">
+                            <ContentControl.DataTemplates>
+                                <DataTemplate DataType="vm:DisassemblyViewModel">
+                                    <StackPanel>
+                                        <TextBlock>Disassembly!</TextBlock>
+                                        <Separator />
+                                    </StackPanel>
+                                </DataTemplate>
+
+                                <DataTemplate DataType="vm:MemoryViewModel">
+                                    <StackPanel>
+                                        <TextBlock>Memory!</TextBlock>
+                                        <Separator />
+                                    </StackPanel>
+                                </DataTemplate>
+
+                                <DataTemplate DataType="x:Object">
+                                </DataTemplate>
+                            </ContentControl.DataTemplates>
+                        </ContentControl>
+
+                        <StackPanel x:DataType="ToolDock">
+                            <MenuItem Header="{DynamicResource ToolChromeControlFloatString}"
+                                        Command="{Binding Owner.Factory.FloatDockable}"
+                                        CommandParameter="{Binding ActiveDockable}" />
+
+                            <MenuItem Header="{DynamicResource ToolChromeControlDockString}"
+                                        Command="{Binding Owner.Factory.PinDockable}"
+                                        CommandParameter="{Binding ActiveDockable}" />
+
+                            <MenuItem Header="{DynamicResource ToolChromeControlDockAsDocumentString}"
+                                        Command="{Binding Owner.Factory.DockAsDocument}"
+                                        CommandParameter="{Binding ActiveDockable}" />
+
+                            <MenuItem Header="{DynamicResource ToolChromeControlAutoHideString}"
+                                        Command="{Binding Owner.Factory.PinDockable}"
+                                        CommandParameter="{Binding ActiveDockable}" />
+
+                            <MenuItem Header="{DynamicResource ToolChromeControlCloseString}"
+                                        Command="{Binding Owner.Factory.CloseDockable}"
+                                        CommandParameter="{Binding ActiveDockable}" />
+                            </StackPanel>
+                    </StackPanel>
+                </Flyout>
+            </Setter>
+        </Style>
+
     </Application.Styles>
 </Application>

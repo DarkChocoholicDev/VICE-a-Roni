@@ -17,6 +17,8 @@ public interface IViceMonitorClient : IAsyncDisposable
     event EventHandler<ViceJammedEventArgs>? Jammed;
     event EventHandler<ViceCheckpointEventArgs>? CheckpointHit;
     event EventHandler<ViceRegistersEventArgs>? RegistersReceived;
+    event EventHandler? Connected;
+    event EventHandler? Disconnected;
     event EventHandler<ViceConnectionLostEventArgs>? ConnectionLost;
     event EventHandler<ViceUnhandledResponseEventArgs>? UnhandledResponse;
 

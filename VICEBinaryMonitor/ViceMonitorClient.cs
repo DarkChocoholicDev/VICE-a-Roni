@@ -68,8 +68,9 @@ public sealed class ViceMonitorClient : IViceMonitorClient
     private int _requestSequence;
     private volatile bool _isStopped;
     private ushort? _currentProgramCounter;
+    private int _isConnected;
 
-    public bool IsConnected => _tcpClient?.Connected == true && _stream is not null;
+    public bool IsConnected => Volatile.Read(ref _isConnected) != 0;
     public bool IsStopped => _isStopped;
     public ushort? CurrentProgramCounter => _currentProgramCounter;
 
@@ -78,6 +79,8 @@ public sealed class ViceMonitorClient : IViceMonitorClient
     public event EventHandler<ViceJammedEventArgs>? Jammed;
     public event EventHandler<ViceCheckpointEventArgs>? CheckpointHit;
     public event EventHandler<ViceRegistersEventArgs>? RegistersReceived;
+    public event EventHandler? Connected;
+    public event EventHandler? Disconnected;
     public event EventHandler<ViceConnectionLostEventArgs>? ConnectionLost;
     public event EventHandler<ViceUnhandledResponseEventArgs>? UnhandledResponse;
 
@@ -85,6 +88,13 @@ public sealed class ViceMonitorClient : IViceMonitorClient
         CancellationToken cancellationToken = default)
     {
         if (IsConnected) throw new InvalidOperationException("Already connected to VICE.");
+
+        if (_tcpClient is not null ||
+            _stream is not null ||
+            _readerTask is not null)
+        {
+            await DisconnectAsync(cancellationToken).ConfigureAwait(false);
+        }
 
         var client = new TcpClient { NoDelay = true };
         try
@@ -94,6 +104,7 @@ public sealed class ViceMonitorClient : IViceMonitorClient
             _stream = client.GetStream();
             _readerCancellation = new CancellationTokenSource();
             _readerTask = ReceiveLoopAsync(_readerCancellation.Token);
+            SetConnected();
         }
         catch
         {
@@ -123,10 +134,9 @@ public sealed class ViceMonitorClient : IViceMonitorClient
         _stream = null;
         _tcpClient = null;
         _registerDefinitions.Clear();
-        _isStopped = false;
-        _currentProgramCounter = null;
 
         FailAllPending(new IOException("Disconnected from VICE."));
+        SetDisconnected();
     }
 
     public Task BreakAsync(CancellationToken cancellationToken = default) => PingAsync(cancellationToken);
@@ -649,6 +659,7 @@ public sealed class ViceMonitorClient : IViceMonitorClient
     private async Task<IReadOnlyList<ViceRawResponse>> SendRequestAsync(byte command, byte terminalResponseType,
         ReadOnlyMemory<byte> body, CancellationToken cancellationToken)
     {
+        if (!IsConnected) throw new InvalidOperationException("Not connected to VICE.");
         var stream = _stream ?? throw new InvalidOperationException("Not connected to VICE.");
         var requestId = NextRequestId();
         var pending = new PendingRequest(terminalResponseType);
@@ -737,19 +748,28 @@ public sealed class ViceMonitorClient : IViceMonitorClient
         catch (EndOfStreamException ex)
         {
             FailAllPending(ex);
-            ConnectionLost?.Invoke(this, new ViceConnectionLostEventArgs(ex));
+
+            if (!cancellationToken.IsCancellationRequested)
+                ConnectionLost?.Invoke(this, new ViceConnectionLostEventArgs(ex));
         }
         catch (IOException ex)
         {
             FailAllPending(ex);
+
             if (!cancellationToken.IsCancellationRequested)
                 ConnectionLost?.Invoke(this, new ViceConnectionLostEventArgs(ex));
         }
         catch (Exception ex)
         {
             FailAllPending(ex);
+
             if (!cancellationToken.IsCancellationRequested)
                 ConnectionLost?.Invoke(this, new ViceConnectionLostEventArgs(ex));
+        }
+        finally
+        {
+            if (!cancellationToken.IsCancellationRequested)
+                SetDisconnected();
         }
     }
 
@@ -998,6 +1018,21 @@ public sealed class ViceMonitorClient : IViceMonitorClient
             if (read == 0) throw new EndOfStreamException("VICE closed the Binary Monitor connection.");
             offset += read;
         }
+    }
+
+    private void SetConnected()
+    {
+        if (Interlocked.Exchange(ref _isConnected, 1) == 0)
+            Connected?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void SetDisconnected()
+    {
+        _isStopped = false;
+        _currentProgramCounter = null;
+
+        if (Interlocked.Exchange(ref _isConnected, 0) != 0)
+            Disconnected?.Invoke(this, EventArgs.Empty);
     }
 
     private static byte BoolByte(bool value) => value ? (byte)1 : (byte)0;

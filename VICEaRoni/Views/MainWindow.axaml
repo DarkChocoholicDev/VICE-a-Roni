@@ -13,7 +13,6 @@
         x:DataType="vm:MainViewModel"
         Icon="/Assets/avalonia-logo.ico"
         Title="Welcome to VICE-a-Roni">
-
     <Design.DataContext>
         <!-- This only sets the DataContext for the previewer in an IDE,
              to set the actual DataContext for runtime, set the DataContext property in code (look at App.axaml.cs) -->
@@ -21,7 +20,11 @@
     </Design.DataContext>
 
     <Window.KeyBindings>
+        <KeyBinding Gesture="Ctrl+B" Command="{Binding BreakCommand}"/>
         <KeyBinding Gesture="Ctrl+Cancel" Command="{Binding BreakCommand}"/>
+        <KeyBinding Gesture="F10" Command="{Binding StepIntoCommand}"/>
+        <KeyBinding Gesture="F11" Command="{Binding StepOverCommand}"/>
+        <KeyBinding Gesture="F5" Command="{Binding ContinueCommand}"/>
     </Window.KeyBindings>
 
     <DockPanel>
@@ -40,8 +43,11 @@
             </MenuItem>
 
             <MenuItem Header="_Monitor">
-                <MenuItem Header="_Connect" Command="{Binding ConnectCommand}" />
-                <MenuItem Header="_Break" Command="{Binding BreakCommand}" />
+                <MenuItem Header="Co_nnect" Command="{Binding ConnectCommand}" />
+                <MenuItem Header="_Break" Command="{Binding BreakCommand}" InputGesture="Ctrl+B" />
+                <MenuItem Header="Step _Into" Command="{Binding StepIntoCommand}" InputGesture="F10" />
+                <MenuItem Header="Step _Over" Command="{Binding StepOverCommand}" InputGesture="F11" />
+                <MenuItem Header="_Continue Execution" Command="{Binding ContinueCommand}" InputGesture="F5" />
             </MenuItem>
         </Menu>
 
@@ -56,24 +62,71 @@
             <DockControl.Factory>
                 <Factory />
             </DockControl.Factory>
-            <RootDock>
-                <ProportionalDock Orientation="Horizontal">
-                    <ToolDock>
-                        <Tool Title="Thing 1">
+
+            <RootDock IsCollapsable="False">
+                <GridDock IsCollapsable="False" ColumnDefinitions="*,auto,auto,auto,auto">
+                    <ToolDock Column="0">
+                        <Tool Title="Console" Context="{Binding #RootWindow.((vm:MainViewModel)DataContext).Console}">
                             <Tool.Content>
                                 <views:ConsoleView DataContext="{Binding #RootWindow.((vm:MainViewModel)DataContext).Console}"/>
                             </Tool.Content>
                         </Tool>
                     </ToolDock>
-                    <ProportionalDockSplitter></ProportionalDockSplitter>
-                    <ToolDock>
-                        <Tool Title="Thing 2">
-                            <Tool.Content>
-                                <views:ConsoleView DataContext="{Binding #RootWindow.((vm:MainViewModel)DataContext).Console2}"/>
-                            </Tool.Content>
-                        </Tool>
-                    </ToolDock>
-                </ProportionalDock>
+
+                    <GridDockSplitter Column="1" ResizeDirection="Columns"></GridDockSplitter>
+
+                    <GridDock Column="2" RowDefinitions="*,auto,*">
+                        <ToolDock Row="0">
+                            <Tool Title="Disassembly 1" Context="{Binding #RootWindow.((vm:MainViewModel)DataContext).Disassembly}">
+                                <Tool.Content>
+                                    <views:DisassemblyView DataContext="{Binding #RootWindow.((vm:MainViewModel)DataContext).Disassembly}"/>
+                                </Tool.Content>
+                            </Tool>
+                        </ToolDock>
+
+                        <GridDockSplitter Row="1" ResizeDirection="Rows"></GridDockSplitter>
+
+                        <ToolDock Row="2">
+                            <Tool Title="Disassembly 2" Context="{Binding #RootWindow.((vm:MainViewModel)DataContext).Disassembly}">
+                                <Tool.Content>
+                                    <views:DisassemblyView DataContext="{Binding #RootWindow.((vm:MainViewModel)DataContext).Disassembly}"/>
+                                </Tool.Content>
+                            </Tool>
+                        </ToolDock>
+                    </GridDock>
+
+                    <GridDockSplitter Column="3" ResizeDirection="Columns"></GridDockSplitter>
+
+                    <GridDock Column="4" RowDefinitions="*,auto,*">
+                        <ToolDock Row="0" >
+                            <Tool Context="{Binding #RootWindow.((vm:MainViewModel)DataContext).Memory}">
+                                <Tool.Title>
+                                    <MultiBinding StringFormat="Memory - {0}">
+                                        <Binding Path="#RootWindow.((vm:MainViewModel)DataContext).Memory.AddressSpace"/>
+                                    </MultiBinding>
+                                </Tool.Title>
+                                <Tool.Content>
+                                    <views:MemoryView DataContext="{Binding #RootWindow.((vm:MainViewModel)DataContext).Memory}"/>
+                                </Tool.Content>
+                            </Tool>
+                        </ToolDock>
+
+                        <GridDockSplitter Row="1" ResizeDirection="Rows"></GridDockSplitter>
+
+                        <ToolDock Row="2">
+                            <Tool Context="{Binding #RootWindow.((vm:MainViewModel)DataContext).Memory2}">
+                                <Tool.Title>
+                                    <MultiBinding StringFormat="Memory 2 - {0}">
+                                        <Binding Path="#RootWindow.((vm:MainViewModel)DataContext).Memory2.AddressSpace"/>
+                                    </MultiBinding>
+                                </Tool.Title>
+                                <Tool.Content>
+                                    <views:MemoryView DataContext="{Binding #RootWindow.((vm:MainViewModel)DataContext).Memory2}"/>
+                                </Tool.Content>
+                            </Tool>
+                        </ToolDock>
+                    </GridDock>
+                </GridDock>
             </RootDock>
         </DockControl>
     </DockPanel>

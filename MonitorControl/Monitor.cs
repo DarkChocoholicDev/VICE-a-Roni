@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using VICEBinaryMonitor;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 
 namespace MonitorControl
 {
@@ -23,6 +24,39 @@ namespace MonitorControl
         /// </summary>
         public bool IsStopped => _vice.IsStopped;
 
+        /// <summary>
+        /// Event handler for debugger state changes.
+        /// </summary>
+        public event EventHandler? DebuggerStateChanged;
+
+        /// <summary>
+        /// The caller-provided method for dispatching monitor events.
+        /// </summary>
+        readonly Action<Action> _dispatcher;
+
+        Disassembler _disassembler = new Disassembler();
+
+        /// <summary>
+        /// Default constructor.
+        /// </summary>
+        public Monitor(Action<Action> dispatcher)
+        {
+            _dispatcher = dispatcher;
+            _vice.Connected += (sender, e) => NotifyDebuggerStateChanged();
+            _vice.Disconnected += (sender, e) => NotifyDebuggerStateChanged();
+            _vice.Jammed += (sender, e) => NotifyDebuggerStateChanged();
+            _vice.Resumed += (sender, e) => NotifyDebuggerStateChanged();
+            _vice.Stopped += (sender, e) => NotifyDebuggerStateChanged();
+        }
+
+        /// <summary>
+        /// Sends a DebuggerStateChanged notification.
+        /// </summary>
+        void NotifyDebuggerStateChanged()
+        {
+            _dispatcher(() => DebuggerStateChanged?.Invoke(this, EventArgs.Empty));
+        }
+
         IViceMonitorClient _vice = new ViceMonitorClient();
         UInt16 _nextDumpAddress = 0;
         uint _defaultDumpLength = 128;
@@ -35,7 +69,12 @@ namespace MonitorControl
         {
             try
             {
-                await _vice.ConnectAsync(viceHostAddress, viceHostPort);
+                // If we're not currently connected, attempt to connect.
+                if (!_vice.IsConnected)
+                {
+                    await _vice.ConnectAsync(viceHostAddress, viceHostPort);
+                }
+
                 return (true, null);
             }
             catch(Exception e)
@@ -44,10 +83,67 @@ namespace MonitorControl
             }
         }
 
+        public async Task<(bool Success, byte[]? Bytes, string? FailureMessage)> ReadMemoryBytes(AddressSpace addressSpace, uint startingAddress, uint byteCount)
+        {
+            byte[]? bytes = null;
+            try
+            {
+                // If we're not currently connected, attempt to connect.
+                if (_vice.IsStopped)
+                {
+                    bytes = await _vice.ReadMemoryAsync((ushort)startingAddress, (ushort)(startingAddress + byteCount - 1), ViceMemorySpace.Main);
+                }
+
+                return (true, bytes, null);
+            }
+            catch (Exception e)
+            {
+                return (false, null, e.Message);
+            }
+        }
+
+        public string DisassembleSingle(uint instructionAddress, MemoryRegion region, out uint nextInstructionAddress)
+        {
+            if (instructionAddress <= 0xFFFF)
+            {
+                var instruction = _disassembler.DisassembleSingle((UInt16)instructionAddress, region, _symbolTable, out var next);
+                nextInstructionAddress = next;
+                return instruction;
+            }
+            else
+            {
+                nextInstructionAddress = 0;
+                return "** Invalid address **";
+            }
+        }
+
+        public UInt16 GetPC()
+        {
+            var regs = _vice.GetRegistersAsync().Result;
+
+            UInt16 regPC = regs["PC"];
+            return regPC;
+        }
+
         public async void RequestMonitorBreak(IConsoleOutput console)
         {
             console.WriteLine("Break requested.");
             await _vice.BreakAsync();
+        }
+
+        public async void StepInto(IConsoleOutput console)
+        {
+            await TraceInstruction(console);
+        }
+
+        public async void StepOver(IConsoleOutput console)
+        {
+            await ProcedureStep(console);
+        }
+
+        public async void ContinueExecution(IConsoleOutput console)
+        {
+            await Go(console);
         }
 
         public async Task ExecuteCommand(string commandLine, IConsoleOutput console)
@@ -68,7 +164,7 @@ namespace MonitorControl
                 switch (command)
                 {
                     case "g":
-                        Go(console);
+                        await Go(console);
                         break;
 
                     case "r":
@@ -76,11 +172,11 @@ namespace MonitorControl
                         break;
 
                     case "t":
-                        TraceInstruction(console);
+                        await TraceInstruction(console);
                         break;
 
                     case "p":
-                        ProcedureStep(console);
+                        await ProcedureStep(console);
                         break;
 
                     case "d":
@@ -216,19 +312,19 @@ namespace MonitorControl
             console.WriteLine($"    {checkpoint.Number}: {checkpoint.Operation} {checkpoint.StartAddress:X4}");
         }
 
-        void TraceInstruction(IConsoleOutput console)
+        async Task TraceInstruction(IConsoleOutput console)
         {
             _vice.StepAsync().Wait();
             ShowRegisters(console);
         }
 
-        void ProcedureStep(IConsoleOutput console)
+        async Task ProcedureStep(IConsoleOutput console)
         {
             _vice.StepOverAsync().Wait();
             ShowRegisters(console);
         }
 
-        void Go(IConsoleOutput console)
+        async Task Go(IConsoleOutput console)
         {
             _vice.ContinueAsync().Wait();
         }

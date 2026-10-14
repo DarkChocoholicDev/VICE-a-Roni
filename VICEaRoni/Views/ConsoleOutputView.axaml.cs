@@ -21,8 +21,6 @@ namespace VICEaRoni.Views
         {
             _viewModel = (ConsoleOutputViewModel)DataContext!;
             _viewModel.ScrollViewer = MainSV;
-
-            _viewModel.WriteLine("Loaded!");
         }
     }
 }

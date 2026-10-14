@@ -16,7 +16,7 @@ namespace VICEaRoni.ViewModels
         /// <summary>
         /// Count of newline-terminated lines in the buffer.
         /// </summary>
-        public InlineCollection Inlines { get; set; } = [new Run("Cheese bonkers!")];
+        public InlineCollection Inlines { get; set; } = [];
         public ScrollViewer? ScrollViewer { get; set; }
 
         public void Write(char c)

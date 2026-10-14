@@ -1,25 +1,37 @@
 ﻿using Avalonia.Interactivity;
+using Avalonia.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using System.Threading.Tasks;
 using MonitorControl;
+using System;
+using System.Threading.Tasks;
 
 namespace VICEaRoni.ViewModels;
 
 public partial class MainViewModel : ViewModelBase
 {
     [ObservableProperty]
-    public partial string StatusMessage { get; set; } = "Welcome to VICE-a-Roni!";
+    public partial string StatusMessage { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets the primary monitor console.
+    /// Gets the view model of the primary monitor console view.
     /// </summary>
     public ConsoleViewModel Console { get; init; }
 
     /// <summary>
-    /// Gets the secondary monitor console.
+    /// Gets the view model of the primary memory view.
     /// </summary>
-    public ConsoleViewModel Console2 { get; init; }
+    public MemoryViewModel Memory { get; init; }
+
+    /// <summary>
+    /// Gets the view model of the secondary memory view.
+    /// </summary>
+    public MemoryViewModel Memory2 { get; init; }
+
+    /// <summary>
+    /// Gets the view model of the primary disassembly view.
+    /// </summary>
+    public DisassemblyViewModel Disassembly { get; init; }
 
     /// <summary>
     /// Gets the active monitor console.
@@ -29,7 +41,7 @@ public partial class MainViewModel : ViewModelBase
     /// <summary>
     /// Monitor instance for sending debugger commands.
     /// </summary>
-    readonly Monitor _monitor = new();
+    readonly Monitor _monitor = new(DispatchMonitorEvent);
 
     /// <summary>
     /// Default constructor.
@@ -37,10 +49,44 @@ public partial class MainViewModel : ViewModelBase
     public MainViewModel()
     {
         Console = new ConsoleViewModel(_monitor);
-        Console2 = new ConsoleViewModel(_monitor);
+        Memory = new MemoryViewModel(_monitor);
+        Memory2 = new MemoryViewModel(_monitor);
+        Disassembly = new DisassemblyViewModel(_monitor);
         ActiveConsoleView = Console;
+        _monitor.DebuggerStateChanged += _monitor_DebuggerStateChanged;
+        UpdateMonitorStatus();
+        ActiveConsoleView.WriteLine("Welcome to VICE-a-Roni!");
     }
 
+    /// <summary>
+    /// Dispatches monitor events in a UI-thread-safe way.
+    /// </summary>
+    /// <param name="action">The monitor action (event) to dispatch.</param>
+    static void DispatchMonitorEvent(Action action)
+    {
+        Dispatcher.UIThread.Post(action);
+    }
+
+    private void _monitor_DebuggerStateChanged(object? sender, System.EventArgs e)
+    {
+        UpdateMonitorStatus();
+    }
+
+    private void UpdateMonitorStatus()
+    {
+        if (!_monitor.IsConnected)
+        {
+            StatusMessage = "Disconnected from VICE. Please use Monitor -> Connect to connect to VICE.";
+        }
+        else if (!_monitor.IsStopped)
+        {
+            StatusMessage = "Running. Press Ctrl+Break to pause and inspect the emulation.";
+        }
+        else
+        {
+            StatusMessage = "Emulation paused.";
+        }
+    }
 
     [RelayCommand]
     public void OpenCommand()
@@ -92,6 +138,45 @@ public partial class MainViewModel : ViewModelBase
         else
         {
             ActiveConsoleView.WriteLine($"Cannot request a break until a VICE connection has been established.");
+        }
+    }
+
+    [RelayCommand]
+    public void StepIntoCommand()
+    {
+        if (_monitor.IsStopped)
+        {
+            _monitor.StepInto(ActiveConsoleView);
+        }
+        else
+        {
+            ActiveConsoleView.WriteLine($"Cannot issue step request until the VICE emulator is stopped.");
+        }
+    }
+
+    [RelayCommand]
+    public void StepOverCommand()
+    {
+        if (_monitor.IsStopped)
+        {
+            _monitor.StepOver(ActiveConsoleView);
+        }
+        else
+        {
+            ActiveConsoleView.WriteLine($"Cannot issue step request until the VICE emulator is stopped.");
+        }
+    }
+
+    [RelayCommand]
+    public void ContinueCommand()
+    {
+        if (_monitor.IsStopped)
+        {
+            _monitor.ContinueExecution(ActiveConsoleView);
+        }
+        else
+        {
+            ActiveConsoleView.WriteLine($"Cannot issue continue request until the VICE emulator is stopped.");
         }
     }
 }

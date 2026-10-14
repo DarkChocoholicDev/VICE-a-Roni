@@ -1,0 +1,31 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:VICEaRoni.ViewModels"
+             xmlns:views="using:VICEaRoni.Views"
+             x:DataType="vm:DisassemblyViewModel"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="VICEaRoni.Views.DisassemblyView">
+    <ListBox ItemsSource="{Binding InstructionRows}">
+        <ListBox.Styles>
+            <Style Selector="ListBoxItem">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Margin" Value="0" />
+            </Style>
+        </ListBox.Styles>
+        <ListBox.ItemTemplate>
+            <DataTemplate>
+                <TextBlock FontFamily="Cascadia Mono, Consolas, DejaVu Sans Mono, Menlo, monospace" Margin="5,2,5,2">
+                    <Run Text="{Binding Instruction}" /><!--
+                    <Run Text="{Binding AddressString}" />
+                    <Run Text=":  " />
+                    <Run Text="{Binding HexDataString}" />
+                    <Run Text="  " />
+                    <Run Text="{Binding CharDataString}" />-->
+                </TextBlock>
+            </DataTemplate>
+        </ListBox.ItemTemplate>
+    </ListBox>
+</UserControl>

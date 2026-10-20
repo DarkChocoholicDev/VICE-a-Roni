@@ -29,9 +29,19 @@ public partial class MainViewModel : ViewModelBase
     public MemoryViewModel Memory2 { get; init; }
 
     /// <summary>
+    /// Gets or sets the view model of the CPU state view.
+    /// </summary>
+    public CPUStateViewModel CPUState { get; init; }
+
+    /// <summary>
     /// Gets the view model of the primary disassembly view.
     /// </summary>
     public DisassemblyViewModel Disassembly { get; init; }
+
+    /// <summary>
+    /// Gets the view model of the register display.
+    /// </summary>
+    public RegisterViewModel Registers { get; init; }
 
     /// <summary>
     /// Gets the active monitor console.
@@ -46,16 +56,25 @@ public partial class MainViewModel : ViewModelBase
     /// <summary>
     /// Default constructor.
     /// </summary>
-    public MainViewModel()
+    public MainViewModel(string[]? args)
     {
         Console = new ConsoleViewModel(_monitor);
         Memory = new MemoryViewModel(_monitor);
         Memory2 = new MemoryViewModel(_monitor);
+        CPUState = new CPUStateViewModel(_monitor);
         Disassembly = new DisassemblyViewModel(_monitor);
+        Registers = new RegisterViewModel(_monitor);
+
         ActiveConsoleView = Console;
         _monitor.DebuggerStateChanged += _monitor_DebuggerStateChanged;
         UpdateMonitorStatus();
         ActiveConsoleView.WriteLine("Welcome to VICE-a-Roni!");
+
+        // Process the settings file if one was specified.
+        if (args?.Length > 0)
+        {
+            _monitor.LoadSettings(args[0], ActiveConsoleView);
+        }
     }
 
     /// <summary>

@@ -77,9 +77,9 @@
 
                     <GridDock Column="2" RowDefinitions="*,auto,*">
                         <ToolDock Row="0">
-                            <Tool Title="Disassembly 1" Context="{Binding #RootWindow.((vm:MainViewModel)DataContext).Disassembly}">
+                            <Tool Title="CPU State" Context="{Binding #RootWindow.((vm:MainViewModel)DataContext).Disassembly}">
                                 <Tool.Content>
-                                    <views:DisassemblyView DataContext="{Binding #RootWindow.((vm:MainViewModel)DataContext).Disassembly}"/>
+                                    <views:CPUStateView DataContext="{Binding #RootWindow.((vm:MainViewModel)DataContext).CPUState}"/>
                                 </Tool.Content>
                             </Tool>
                         </ToolDock>

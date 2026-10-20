@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "VICEaRoni": {
+      "commandName": "Project",
+      "commandLineArgs": "Settings.json"
+    }
+  }
+}

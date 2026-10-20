@@ -1,0 +1,36 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:VICEaRoni.ViewModels"
+             xmlns:views="using:VICEaRoni.Views"
+             x:DataType="vm:RegisterViewModel"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="VICEaRoni.Views.RegisterView"
+             FontFamily="Cascadia Mono, Consolas, DejaVu Sans Mono, Menlo, monospace" Margin="5,2,5,2">
+    <UserControl.Styles>
+        <Style Selector="TextBlock[(Grid.Row)=0]">
+            <Setter Property="Foreground" Value="#00C"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Grid RowDefinitions="auto, auto" ColumnDefinitions="auto, auto, auto, auto, auto, auto, auto"
+          ColumnSpacing="10" RowSpacing="2">
+        <TextBlock Grid.Row="0" Grid.Column="0" HorizontalAlignment="Center" >A</TextBlock>
+        <TextBlock Grid.Row="0" Grid.Column="1" HorizontalAlignment="Center">X</TextBlock>
+        <TextBlock Grid.Row="0" Grid.Column="2" HorizontalAlignment="Center">Y</TextBlock>
+        <TextBlock Grid.Row="0" Grid.Column="3" HorizontalAlignment="Center">SP</TextBlock>
+        <TextBlock Grid.Row="0" Grid.Column="4" HorizontalAlignment="Center">PC</TextBlock>
+        <TextBlock Grid.Row="0" Grid.Column="5">Flags</TextBlock>
+
+        <!-- Underline spanning all columns of Row 0 -->
+        <!--<Border Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="7" Height="1" Background="Gray" VerticalAlignment="Bottom" />-->
+
+        <TextBlock Grid.Row="1" Grid.Column="0" Text="{Binding RegA}" />
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RegX}" />
+        <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding RegY}" />
+        <TextBlock Grid.Row="1" Grid.Column="3" Text="{Binding RegSP}" />
+        <TextBlock Grid.Row="1" Grid.Column="4" Text="{Binding RegPC}" />
+        <TextBlock Grid.Row="1" Grid.Column="5" Text="{Binding RegFlags}" />
+    </Grid>
+</UserControl>

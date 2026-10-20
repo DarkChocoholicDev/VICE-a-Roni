@@ -1,0 +1,18 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:vm="using:VICEaRoni.ViewModels"
+             xmlns:views="using:VICEaRoni.Views"
+             x:DataType="vm:CPUStateViewModel"
+             x:Name="RootWindow"
+             mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+             x:Class="VICEaRoni.Views.CPUStateView">
+    <Grid RowDefinitions="auto, *">
+        
+        <Border Grid.Row="0" BorderThickness="0 .5 0 .5" BorderBrush="Gray">
+            <views:RegisterView DataContext="{Binding #RootWindow.((vm:CPUStateViewModel)DataContext).Registers}"/>
+        </Border>
+        <views:DisassemblyView Grid.Row="1" DataContext="{Binding #RootWindow.((vm:CPUStateViewModel)DataContext).Disassembly}"/>
+    </Grid>
+</UserControl>

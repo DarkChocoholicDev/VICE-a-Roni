@@ -13,6 +13,16 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Remove="Settings.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="12.1.4" />
     <PackageReference Include="Avalonia.Desktop" Version="12.1.4" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.4" />
@@ -33,6 +43,9 @@
   </ItemGroup>
 
   <ItemGroup>
+    <Compile Update="Views\CPUStateView.axaml.cs">
+      <DependentUpon>CPUStateView.axaml</DependentUpon>
+    </Compile>
     <Compile Update="Views\ConsoleInputView.axaml.cs">
       <DependentUpon>ConsoleInputView.axaml</DependentUpon>
     </Compile>
@@ -41,6 +54,9 @@
     </Compile>
     <Compile Update="Views\ConsoleView.axaml.cs">
       <DependentUpon>ConsoleView.axaml</DependentUpon>
+    </Compile>
+    <Compile Update="Views\RegisterView.axaml.cs">
+      <DependentUpon>RegisterView.axaml</DependentUpon>
     </Compile>
   </ItemGroup>
 </Project>

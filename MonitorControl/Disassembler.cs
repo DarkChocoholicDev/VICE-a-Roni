@@ -353,12 +353,24 @@ namespace MonitorControl
                     }
                 }
 
-                disassembly = string.Format(
-                    $"{instructionAddress:X4}  " +
-                    $"{opcodeByte:X2}" +
-                    ((instructionBytes!.Length >= 2) ? $" {instructionBytes[1]:X2}" : "   ") +
-                    ((instructionBytes!.Length >= 3) ? $" {instructionBytes[2]:X2}" : "   ") +
-                    $"  {instruction.Mnemonic}{(operand != null ? $" {operand}" : "")}");
+                //if (instructionBytes != null)
+                {
+                    disassembly = string.Format(
+                        $"{instructionAddress:X4}  " +
+                        $"{opcodeByte:X2}" +
+                        ((instructionBytes?.Length >= 2) ? $" {instructionBytes[1]:X2}" : "   ") +
+                        ((instructionBytes?.Length >= 3) ? $" {instructionBytes[2]:X2}" : "   ") +
+                        $"  {instruction.Mnemonic}{(operand != null ? $" {operand}" : "")}");
+                }
+                //else
+                //{
+                //    $"{instructionAddress:X4}  " +
+                //    $"{opcodeByte:X2}" +
+                //    ((instructionBytes!.Length >= 2) ? $" {instructionBytes[1]:X2}" : "   ") +
+                //    ((instructionBytes!.Length >= 3) ? $" {instructionBytes[2]:X2}" : "   ") +
+                //    $"  {instruction.Mnemonic}{(operand != null ? $" {operand}" : "")}");
+                //}
+
             }
             else
             {
@@ -491,237 +503,4 @@ namespace MonitorControl
         }
     }
 
-
-    public enum AddressSpace
-    {
-        Main,
-        Drive8,
-        Drive9,
-        Drive10,
-        Drive11,
-        COMALPage0,
-        COMALPage1,
-        COMALPage2,
-        COMALPage3,
-        COMALPage4,
-        COMALPage5,
-        COMALPage6,
-    }
-
-    /// <summary>
-    /// A class representing a region of C64 memory.
-    /// </summary>
-    public class MemoryRegion
-    {
-        public MemoryRegion(UInt16 startingAddress, byte[] bytes, AddressSpace addressSpace = AddressSpace.Main)
-        {
-            Bytes = bytes;
-            AddressSpace = addressSpace;
-            StartingAddress = startingAddress;
-        }
-
-        /// <summary>
-        /// Gets the collection of bytes in the memory range.
-        /// </summary>
-        public byte[] Bytes { get; init; }
-
-        /// <summary>
-        /// Gets the category of memory used for this region.
-        /// </summary>
-        public AddressSpace AddressSpace { get; set; }
-
-        /// <summary>
-        /// Gets the starting address of the memory range.
-        /// </summary>
-        public UInt16 StartingAddress
-        {
-            get
-            {
-                return _startingAddress;
-            }
-            init
-            {
-                _startingAddress = value;
-                EndingAddress = (UInt16)(value + Bytes.Length - 1);
-            }
-        }
-        UInt16 _startingAddress;
-
-        /// <summary>
-        /// Gets the last (highest) address in the memory region.
-        /// </summary>
-        public UInt16 EndingAddress { get; private set; }
-
-        /// <summary>
-        /// Gets the count of bytes in the memory region.
-        /// </summary>
-        public int Length => Bytes.Length;
-
-        /// <summary>
-        /// Gets the byte index of the specified address.
-        /// </summary>
-        /// <param name="address">Target memory address.</param>
-        /// <param name="index">Receives the corresponding index, if successful.</param>
-        /// <param name="bytesAvailable">Receives the count of bytes available beginning at the target memory address.</param>
-        /// <returns>A value indicating whether the operation succeeded.</returns>
-        /// <remarks>A failure could occur if the target address lies outside the range of the memory region.</remarks>
-        public bool IndexFromAddress(UInt16 address, out int index, out int bytesAvailable)
-        {
-            index = address - StartingAddress;
-            bytesAvailable = Length - index;
-            return (index >= 0 && index < Length);
-        }
-
-        /// <summary>
-        /// Gets a byte from the specified address.
-        /// </summary>
-        /// <param name="address">Target address.</param>
-        /// <param name="value">Receive the byte value, if successful.</param>
-        /// <returns>A value indicating whether the operation succeeded.</returns>
-        public bool GetByte(UInt16 address, out byte value)
-        {
-            int index;
-            int bytesAvailable;
-            if (IndexFromAddress(address, out index, out bytesAvailable) && bytesAvailable >= 1)
-            {
-                value = Bytes[index];
-                return true;
-            }
-            else
-            {
-                value = default;
-                return false;
-            }
-        }
-
-        public byte[]? GetBytes(UInt16 address, int byteCount)
-        {
-            if (IndexFromAddress(address, out var index, out var bytesAvailable) && bytesAvailable >= byteCount)
-            {
-                return Bytes[index..(index + byteCount)].ToArray();
-            }
-            else
-            {
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Gets a word from the specified address.
-        /// </summary>
-        /// <param name="address">Target address.</param>
-        /// <param name="value">Receive the word value, if successful.</param>
-        /// <returns>A value indicating whether the operation succeeded.</returns>
-        public bool GetWord(UInt16 address, out UInt16 value)
-        {
-            int index;
-            int bytesAvailable;
-            if (IndexFromAddress(address, out index, out bytesAvailable) && bytesAvailable >= 2)
-            {
-                value = (UInt16)((Bytes[index+1] << 8) | Bytes[index]);
-                return true;
-            }
-            else
-            {
-                value = default;
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// Reads from VICE memory using the specified address space.
-        /// </summary>
-        /// <param name="address">VICE memory address to read from.</param>
-        /// <param name="length">Count of bytes to read.</param>
-        /// <param name="vice">Client for issuing VICE requests.</param>
-        /// <param name="addressSpace">Address space to read from.</param>
-        /// <returns>Returns a byte array containing bytes read, or null if unable to process the request.</returns>
-        public static byte[]? ReadViceMemory(UInt16 address, UInt16 length, IViceMonitorClient vice, AddressSpace addressSpace = AddressSpace.Main)
-        {
-            bool pageSwitchNeeded = false;
-            byte oldPage = 0;
-            byte newPage = 0;
-            ViceMemorySpace viceMemorySpace;
-
-            switch (addressSpace)
-            {
-                case AddressSpace.Main:
-                    viceMemorySpace = ViceMemorySpace.Main;
-                    break;
-
-                case AddressSpace.Drive8:
-                    viceMemorySpace = ViceMemorySpace.Drive8;
-                    break;
-
-                case AddressSpace.Drive9:
-                    viceMemorySpace = ViceMemorySpace.Drive9;
-                    break;
-
-                case AddressSpace.Drive10:
-                    viceMemorySpace = ViceMemorySpace.Drive10;
-                    break;
-
-                case AddressSpace.Drive11:
-                    viceMemorySpace = ViceMemorySpace.Drive11;
-                    break;
-
-                case AddressSpace.COMALPage1:
-                    viceMemorySpace = ViceMemorySpace.Main;
-                    newPage = 0x80;
-                    pageSwitchNeeded = true;
-                    break;
-
-                case AddressSpace.COMALPage2:
-                    viceMemorySpace = ViceMemorySpace.Main;
-                    newPage = 0x81;
-                    pageSwitchNeeded = true;
-                    break;
-
-                case AddressSpace.COMALPage3:
-                    viceMemorySpace = ViceMemorySpace.Main;
-                    newPage = 0x82;
-                    pageSwitchNeeded = true;
-                    break;
-
-                case AddressSpace.COMALPage4:
-                    viceMemorySpace = ViceMemorySpace.Main;
-                    newPage = 0x83;
-                    pageSwitchNeeded = true;
-                    break;
-
-                case AddressSpace.COMALPage5:
-                    viceMemorySpace = ViceMemorySpace.Main;
-                    newPage = 0x84;
-                    pageSwitchNeeded = true;
-                    break;
-
-                case AddressSpace.COMALPage6:
-                    viceMemorySpace = ViceMemorySpace.Main;
-                    newPage = 0x85;
-                    pageSwitchNeeded = true;
-                    break;
-
-                default:
-                    return null;
-            }
-
-            //  Switch COMAL banks, if needed.
-            if (pageSwitchNeeded)
-            {
-                oldPage = vice.ReadByteAsync(((UInt16)(0xDE00)), ViceMemorySpace.Main, sideEffects: false).Result;
-                vice.WriteByteAsync((UInt16)(0xDE00), newPage, ViceMemorySpace.Main, sideEffects: true);
-            }
-
-            //  Read the memory block.
-            var memory = vice.ReadMemoryAsync(address, ((UInt16)(address + length - 1)), memorySpace: viceMemorySpace).Result;
-
-            //  Restore the COMAL bank, if needed.
-            if (pageSwitchNeeded)
-            {
-                vice.WriteByteAsync((UInt16)(0xDE00), (byte)(oldPage | 0x80), ViceMemorySpace.Main, sideEffects: true);
-            }
-
-            return memory;
-        }
-    }
 }

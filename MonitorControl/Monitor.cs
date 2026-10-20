@@ -86,15 +86,26 @@ namespace MonitorControl
         public async Task<(bool Success, byte[]? Bytes, string? FailureMessage)> ReadMemoryBytes(AddressSpace addressSpace, uint startingAddress, uint byteCount)
         {
             byte[]? bytes = null;
+
             try
             {
-                // If we're not currently connected, attempt to connect.
+                // If we're stopped in the monitor...
                 if (_vice.IsStopped)
                 {
-                    bytes = await _vice.ReadMemoryAsync((ushort)startingAddress, (ushort)(startingAddress + byteCount - 1), ViceMemorySpace.Main);
+                    bytes = await MemoryRegion.ReadViceMemoryAsync((UInt16)startingAddress, byteCount, _vice, addressSpace);
+                    if (bytes != null)
+                    {
+                        return (true, bytes, null);
+                    }
+                    else
+                    {
+                        return (false, null, "Failed to read emulator memory.");
+                    }
                 }
-
-                return (true, bytes, null);
+                else
+                {
+                    return (false, null, "Could not access memory because the emulator is running.");
+                }
             }
             catch (Exception e)
             {
@@ -115,6 +126,28 @@ namespace MonitorControl
                 nextInstructionAddress = 0;
                 return "** Invalid address **";
             }
+        }
+
+        /// <summary>
+        /// Retrieves the current CPU registers.
+        /// </summary>
+        /// <returns>The current CPU register snapshot if successful, otherwise a failure indication.</returns>
+        public Result<Registers6502> GetRegisters()
+        {
+            var result = new Result<Registers6502>();
+            var viceRegs = _vice.GetRegistersAsync().Result;
+            var regs = new Registers6502()
+            {
+                A = (byte)viceRegs["A"],
+                X = (byte)viceRegs["X"],
+                Y = (byte)viceRegs["Y"],
+                SP = (byte)viceRegs["SP"],
+                Flags = (byte)viceRegs["FL"],
+                PC = viceRegs["PC"],
+            };
+
+            result.Data = regs;
+            return result;
         }
 
         public UInt16 GetPC()
@@ -339,7 +372,7 @@ namespace MonitorControl
             }
         }
 
-        void DumpMemoryBytes(string argument, IConsoleOutput console)
+        async void DumpMemoryBytes(string argument, IConsoleOutput console)
         {
             var address = _nextDumpAddress;
             int length = (int)_defaultDumpLength;
@@ -400,36 +433,43 @@ namespace MonitorControl
             }
 
             length = Math.Min(length, 65536 - address);
-            var memory = _vice.ReadMemoryAsync(address, ((UInt16)(address + length - 1))).Result;
+            var memory = await MemoryRegion.ReadViceMemoryAsync(address, ((UInt16)(length)), _vice, addressSpace);
+            //var memory = _vice.ReadMemoryAsync(address, ((UInt16)(address + length - 1))).Result;
 
-            for (int i = 0; i < memory.Length; i += 16)
+            if (memory != null)
             {
-                console.Write($"{address + i:X4}: ");
-                for (int j = 0; j < 16 && i + j < memory.Length; j++)
+                for (int i = 0; i < memory.Length; i += 16)
                 {
-                    console.Write($"{memory[i + j]:X2} ");
-                }
-
-                console.Write("    ");
-                for (int j = 0; j < 16 && i + j < memory.Length; j++)
-                {
-                    byte b = memory[i + j];
-                    char c = PETSCIIHelper.PETSCIIChars[b].ShiftedASCIIValue;
-                    if (b < 32 || b > 127 || c == '\0')
+                    console.Write($"{address + i:X4}: ");
+                    for (int j = 0; j < 16 && i + j < memory.Length; j++)
                     {
-                        c = '.';
+                        console.Write($"{memory[i + j]:X2} ");
                     }
-                    console.Write(c);
+
+                    console.Write("    ");
+                    for (int j = 0; j < 16 && i + j < memory.Length; j++)
+                    {
+                        byte b = memory[i + j];
+                        char c = PETSCIIHelper.PETSCIIChars[b].ShiftedASCIIValue;
+                        if (b < 32 || b > 127 || c == '\0')
+                        {
+                            c = '.';
+                        }
+                        console.Write(c);
+                    }
+
+                    console.WriteLine();
                 }
 
-
-                console.WriteLine();
+                _nextDumpAddress = ((UInt16)(address + (UInt16)(memory.Length)));
             }
-
-            _nextDumpAddress = ((UInt16)(address + (UInt16)(memory.Length)));
+            else
+            {
+                console.WriteLine("Could not read memory.");
+            }
         }
 
-        void DisassembleMemory(string argument, IConsoleOutput console)
+        async void DisassembleMemory(string argument, IConsoleOutput console)
         {
             var address = _nextDisassembleAddress;
             int instructionCount = (int)_defaultDisassembleLength;
@@ -496,7 +536,7 @@ namespace MonitorControl
             // Otherwise, use the instruction count * the maximum instruction length (3).
             var bufferLength = (endingAddress != null) ? (UInt16)(endingAddress) - address + 1 + 2 : instructionCount * 3;
             bufferLength = Math.Min(bufferLength, 65536 - address);
-            var memory = MemoryRegion.ReadViceMemory(address, ((UInt16)(bufferLength)), _vice, addressSpace);
+            var memory = await MemoryRegion.ReadViceMemoryAsync(address, ((UInt16)(bufferLength)), _vice, addressSpace);
             if (memory == null)
             {
                 console.WriteLine("Unable to access VICE memory.");
@@ -549,9 +589,27 @@ namespace MonitorControl
             _symbolTable.ClearSymbols();
         }
 
+        public UInt16? GetAddress(string symbolOrAddress)
+        {
+            var address = GetAddress(symbolOrAddress, out _);
+            return address;
+        }
+
         UInt16? GetAddress(string symbolOrAddress, out AddressSpace? addressSpace)
         {
-            addressSpace = AddressSpace.COMALPage5;
+            addressSpace = AddressSpace.Main;
+
+            var addressParts = symbolOrAddress.Split(':');
+            if (addressParts.Length == 2)
+            {
+                addressSpace = MemoryRegion.AddressSpaceFromName(addressParts[0]);
+                if (addressSpace == null)
+                {
+                    return null;
+                }
+
+                symbolOrAddress = addressParts[1];
+            }
 
             var symbol = _symbolTable.GetSymbol(symbolOrAddress);
             if (symbol != null)
@@ -569,7 +627,7 @@ namespace MonitorControl
             return null;
         }
 
-        void LoadSettings(string settingsFilePath, IConsoleOutput console)
+        public void LoadSettings(string settingsFilePath, IConsoleOutput console)
         {
             if (System.IO.File.Exists(settingsFilePath))
             {

@@ -27,34 +27,83 @@ public partial class MemoryViewModel : ViewModelBase
             $"{CharOrDot(08)}{CharOrDot(09)}{CharOrDot(10)}{CharOrDot(11)}{CharOrDot(12)}{CharOrDot(13)}{CharOrDot(14)}{CharOrDot(15)}";
 
         public string HexByte(int index) 
-        { 
-            return (Data.HasValue) ? $"{Data.Value.Span[index]:X2}" : "??"; 
+        {
+            if (Data.HasValue)
+            {
+                if (index < Data.Value.Length)
+                {
+                    return $"{Data.Value.Span[index]:X2}";
+                }
+                else
+                {
+                    return "  ";
+                }
+            }
+            else
+            {
+                return "??"; 
+            }
         }
 
         public char CharOrDot(int index)
         {
             if (Data.HasValue)
             {
-                var pc = PETSCIIHelper.PETSCIIChars[Data.Value.Span[index]].UnshiftedASCIIValue;
-                return (pc != '\0') ? pc : '.';
+                if (index < Data.Value.Length)
+                {
+                    var pc = PETSCIIHelper.PETSCIIChars[Data.Value.Span[index]].UnshiftedASCIIValue;
+                    return (pc != '\0') ? pc : '.';
+                }
+                else
+                {
+                    return ' ';
+                }
             }
             else
             {
                 return '?';
             }    
         }
-
-        public char CharOrDot(byte c)
-        { 
-            var pc = PETSCIIHelper.PETSCIIChars[c].UnshiftedASCIIValue; return (pc != '\0') ? pc : '.'; 
-        }
     }
+
+    public AddressSpace[] AddressSpaceEnumValues => Enum.GetValues<AddressSpace>();
+
 
     [ObservableProperty]
     public partial IReadOnlyList<MemoryRow> MemoryRows { get; private set; } = [];
 
     [ObservableProperty]
     public partial AddressSpace AddressSpace { get; set; } = AddressSpace.Main;
+
+    [ObservableProperty]
+    public partial string StartingAddressOrLabel { get; set; } = "0000";
+
+    [ObservableProperty]
+    public partial string UnitCount { get; set; } = "10000";
+
+    partial void OnAddressSpaceChanged(AddressSpace value)
+    {
+        if (_monitor.IsStopped)
+        {
+            LoadMemoryValues();
+        }
+    }
+
+    partial void OnStartingAddressOrLabelChanged(string value)
+    {
+        if (_monitor.IsStopped)
+        {
+            LoadMemoryValues();
+        }
+    }
+
+    partial void OnUnitCountChanged(string value)
+    {
+        if (_monitor.IsStopped)
+        {
+            LoadMemoryValues();
+        }
+    }
 
     public MemoryViewModel(Monitor monitor)
     {
@@ -89,18 +138,31 @@ public partial class MemoryViewModel : ViewModelBase
 
     private async void LoadMemoryValues()
     {
-        var result = await _monitor.ReadMemoryBytes(AddressSpace, 0, 65536);
-        if (result.Success)
+        var parsedAddress = _monitor.GetAddress(StartingAddressOrLabel);
+        if (parsedAddress != null)
         {
-            Memory<byte> bytes = result.Bytes!;
-            var memoryRows = new List<MemoryRow>();
-            for (uint u = 0; u < 65536 / 16; u++)
+            if (uint.TryParse(UnitCount, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var parsedLength))
             {
-                memoryRows.Add(new MemoryRow { Address = u * 16, Data = bytes.Slice((int)(u * 16), 16) });
-            }
+                var startingAddress = (uint)parsedAddress!;
+                var byteCount = parsedLength;
+                var result = await _monitor.ReadMemoryBytes(AddressSpace, startingAddress, byteCount);
+                if (result.Success)
+                {
+                    Memory<byte> bytes = result.Bytes!;
+                    var memoryRows = new List<MemoryRow>();
+                    var bytesLeft = (int)byteCount;
+                    for (uint row = 0; bytesLeft > 0; row++, bytesLeft -= 16)
+                    {
+                        memoryRows.Add(new MemoryRow { Address = startingAddress + row * 16, Data = bytes.Slice((int)(row * 16), Math.Min(16, (int)bytesLeft)) });
+                    }
 
-            MemoryRows = memoryRows;
+                    MemoryRows = memoryRows;
+                    return;
+                }
+            }
         }
+
+        LoadEmptyValues();
     }
 
     public Monitor _monitor { get; set; }

@@ -68,7 +68,6 @@ public partial class MemoryViewModel : ViewModelBase
 
     public AddressSpace[] AddressSpaceEnumValues => Enum.GetValues<AddressSpace>();
 
-
     [ObservableProperty]
     public partial IReadOnlyList<MemoryRow> MemoryRows { get; private set; } = [];
 

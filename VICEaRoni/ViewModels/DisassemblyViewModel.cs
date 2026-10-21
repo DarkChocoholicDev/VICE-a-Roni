@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
 using static System.Runtime.InteropServices.JavaScript.JSType;
+using static VICEaRoni.ViewModels.MemoryViewModel;
 
 namespace VICEaRoni.ViewModels;
 
@@ -52,18 +53,27 @@ public partial class DisassemblyViewModel : ViewModelBase
         }
     }
 
+    public AddressSpace[] AddressSpaceEnumValues => Enum.GetValues<AddressSpace>();
+
     [ObservableProperty]
     public partial IReadOnlyList<InstructionRow> InstructionRows { get; private set; } = [];
 
     [ObservableProperty]
-    public partial UInt16 StartingAddress { get; set; } = 0;
+    public partial AddressSpace AddressSpace { get; set; } = AddressSpace.Main;
 
     [ObservableProperty]
-    public partial AddressSpace AddressSpace { get; set; } = AddressSpace.Main;
+    public partial string StartingAddressOrLabel { get; set; } = "0000";
+
+    [ObservableProperty]
+    public partial string UnitCount { get; set; } = "1000";
+
+    [ObservableProperty]
+    public partial bool FollowPC { get; set; } = false;
 
     const int MaxEmptyRows = 200;
     const int MaxRows = 4096;
 
+    UInt16 _pcAddress;
     byte[]? _bytes = null;
 
     public DisassemblyViewModel(Monitor monitor)
@@ -81,7 +91,31 @@ public partial class DisassemblyViewModel : ViewModelBase
     {
         if (_monitor.IsStopped)
         {
-            StartingAddress = _monitor.GetPC();
+            _pcAddress = _monitor.GetPC();
+            LoadMemoryValues();
+        }
+    }
+
+    partial void OnAddressSpaceChanged(AddressSpace value)
+    {
+        if (_monitor.IsStopped)
+        {
+            LoadMemoryValues();
+        }
+    }
+
+    partial void OnStartingAddressOrLabelChanged(string value)
+    {
+        if (_monitor.IsStopped)
+        {
+            LoadMemoryValues();
+        }
+    }
+
+    partial void OnUnitCountChanged(string value)
+    {
+        if (_monitor.IsStopped)
+        {
             LoadMemoryValues();
         }
     }
@@ -90,7 +124,7 @@ public partial class DisassemblyViewModel : ViewModelBase
     {
         // Set up "empty" data to be displayed until the monitor is stopped.
         var rows = new List<InstructionRow>();
-        for (uint u = StartingAddress; u < StartingAddress + MaxEmptyRows; u++)
+        for (uint u = 0; u < MaxEmptyRows; u++)
         {
             rows.Add(new InstructionRow { Address = u, Data = null, Instruction = "?" });
         }
@@ -100,31 +134,44 @@ public partial class DisassemblyViewModel : ViewModelBase
 
     private async void LoadMemoryValues()
     {
-        var result = await _monitor.ReadMemoryBytes(AddressSpace.Main, 0, 65536);
+        uint? address = _pcAddress;
 
-        if (result.Success)
+        if (!FollowPC)
         {
-            _bytes = result.Bytes;
-            var address = StartingAddress;
-            var region = new MemoryRegion(0, _bytes!);
-            var nextInstructionAddress = (uint)address;
-            var rows = new List<InstructionRow>();
-
-            for (var i = 0; i < MaxRows && nextInstructionAddress <= 0xFFFF; i++)
-            {
-                //// Display any code labels first.
-                //IEnumerable<SourceSymbol> matchingInstructionLabels = _symbolTable.GetSymbolsFromValue(nextInstructionAddress);
-                //foreach (var label in matchingInstructionLabels)
-                //{
-                //    console.WriteLine($"{label.Name}:");
-                //}
-
-                var instruction = _monitor.DisassembleSingle(nextInstructionAddress, region, out nextInstructionAddress);
-                rows.Add(new InstructionRow { Instruction = instruction });
-            }
-
-            InstructionRows = rows;
+            address = _monitor.GetAddress(StartingAddressOrLabel);
         }
+
+        bool lengthResult = uint.TryParse(UnitCount, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var parsedLength);
+
+        if (address != null && lengthResult)
+        {
+            var result = await _monitor.ReadMemoryBytes(AddressSpace, 0, 65536);
+            if (result.Success)
+            {
+                _bytes = result.Bytes;
+                var region = new MemoryRegion(0, _bytes!);
+                var nextInstructionAddress = (uint)address;
+                var rows = new List<InstructionRow>();
+
+                for (var i = 0; i < parsedLength && nextInstructionAddress <= 0xFFFF; i++)
+                {
+                    //// Display any code labels first.
+                    //IEnumerable<SourceSymbol> matchingInstructionLabels = _symbolTable.GetSymbolsFromValue(nextInstructionAddress);
+                    //foreach (var label in matchingInstructionLabels)
+                    //{
+                    //    console.WriteLine($"{label.Name}:");
+                    //}
+
+                    var instruction = _monitor.DisassembleSingle(nextInstructionAddress, region, out nextInstructionAddress);
+                    rows.Add(new InstructionRow { Instruction = instruction });
+                }
+
+                InstructionRows = rows;
+                return;
+            }
+        }
+
+        LoadEmptyValues();
     }
 
     public Monitor _monitor { get; set; }

@@ -32,7 +32,7 @@ public partial class CPUStateViewModel : ViewModelBase
     public CPUStateViewModel(Monitor monitor)
     {
         _monitor = monitor;
-        Disassembly = new DisassemblyViewModel(_monitor);
+        Disassembly = new DisassemblyViewModel(_monitor) { FollowPC = true };
         Registers = new RegisterViewModel(_monitor);
     }
 }

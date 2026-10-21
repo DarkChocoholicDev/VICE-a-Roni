@@ -13,7 +13,6 @@ namespace MonitorControl
         Drive9,
         Drive10,
         Drive11,
-        COMALPage0,
         COMALPage1,
         COMALPage2,
         COMALPage3,
@@ -283,6 +282,130 @@ namespace MonitorControl
             }
 
             return memory;
+        }
+
+        /// <summary>
+        /// Asynchronously writes a byte to VICE memory using the specified address space.
+        /// </summary>
+        /// <param name="value">Value to write.</param>
+        /// <param name="address">VICE memory address to write to.</param>
+        /// <param name="vice">Client for issuing VICE requests.</param>
+        /// <param name="addressSpace">Address space to read from.</param>
+        /// <returns>Returns a value indicating whether the write operation succeeded.</returns>
+        public async static Task<bool> WriteViceByteAsync(byte value, UInt16 address, IViceMonitorClient vice, AddressSpace addressSpace = AddressSpace.Main)
+        {
+            bool result = true;
+            bool pageSwitchNeeded = false;
+            byte oldPage = 0;
+            byte newPage = 0;
+            ViceMemorySpace viceMemorySpace;
+
+            switch (addressSpace)
+            {
+                case AddressSpace.Main:
+                    viceMemorySpace = ViceMemorySpace.Main;
+                    break;
+
+                case AddressSpace.Drive8:
+                    viceMemorySpace = ViceMemorySpace.Drive8;
+                    break;
+
+                case AddressSpace.Drive9:
+                    viceMemorySpace = ViceMemorySpace.Drive9;
+                    break;
+
+                case AddressSpace.Drive10:
+                    viceMemorySpace = ViceMemorySpace.Drive10;
+                    break;
+
+                case AddressSpace.Drive11:
+                    viceMemorySpace = ViceMemorySpace.Drive11;
+                    break;
+
+                case AddressSpace.COMALPage1:
+                    viceMemorySpace = ViceMemorySpace.Main;
+                    newPage = 0x80;
+                    pageSwitchNeeded = true;
+                    break;
+
+                case AddressSpace.COMALPage2:
+                    viceMemorySpace = ViceMemorySpace.Main;
+                    newPage = 0x81;
+                    pageSwitchNeeded = true;
+                    break;
+
+                case AddressSpace.COMALPage3:
+                    viceMemorySpace = ViceMemorySpace.Main;
+                    newPage = 0x82;
+                    pageSwitchNeeded = true;
+                    break;
+
+                case AddressSpace.COMALPage4:
+                    viceMemorySpace = ViceMemorySpace.Main;
+                    newPage = 0x83;
+                    pageSwitchNeeded = true;
+                    break;
+
+                case AddressSpace.COMALPage5:
+                    viceMemorySpace = ViceMemorySpace.Main;
+                    newPage = 0x84;
+                    pageSwitchNeeded = true;
+                    break;
+
+                case AddressSpace.COMALPage6:
+                    viceMemorySpace = ViceMemorySpace.Main;
+                    newPage = 0x85;
+                    pageSwitchNeeded = true;
+                    break;
+
+                default:
+                    return false;
+            }
+
+            // Serialize access so that our bank switching doesn't get disrupted.
+            await _accessSerializer.WaitAsync();
+
+            try
+            {
+                // Switch COMAL banks, if needed. We use the I/O bank to ensure we're accessing the proper memory.
+                // TODO: If eventually adding debugging support for real hardware, change how the COMAL page variable is accessed.
+                //       Accessing 0xDE00 works in VICE, but doesn't work on real hardware because it is a write-only memory location.
+                //       For that, we need to use the shadow variable maintained by COMAL.
+                UInt16 io = 3; // TODO: Retrieve bank info during connection to the server, and then use it throughout. (await vice.FindBankAsync("io"))?.Id;
+                var restorePage = false;
+                try
+                {
+                    if (pageSwitchNeeded)
+                    {
+                        oldPage = await vice.ReadByteAsync(((UInt16)(0xDE00)), ViceMemorySpace.Main, bankId: io, sideEffects: false);
+                        restorePage = true;
+                        await vice.WriteByteAsync((UInt16)(0xDE00), newPage, ViceMemorySpace.Main, bankId: io, sideEffects: true);
+                    }
+
+                    //  Write the value.
+                    await vice.WriteByteAsync(address, value, memorySpace: viceMemorySpace);
+                    result = true;
+                }
+                finally
+                {
+                    //  Restore the COMAL bank, if needed.
+                    if (restorePage)
+                    {
+                        await vice.WriteByteAsync((UInt16)(0xDE00), oldPage, ViceMemorySpace.Main, bankId: io, sideEffects: true);
+                    }
+                }
+            }
+            catch
+            {
+                result = false;
+            }
+            finally
+            {
+                // Others can now access memory.
+                _accessSerializer.Release();
+            }
+
+            return result;
         }
 
         public static AddressSpace? AddressSpaceFromName(string name)

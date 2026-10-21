@@ -25,9 +25,14 @@ namespace MonitorControl
         public bool IsStopped => _vice.IsStopped;
 
         /// <summary>
-        /// Event handler for debugger state changes.
+        /// Event indicating that the debugger state has changed.
         /// </summary>
         public event EventHandler? DebuggerStateChanged;
+
+        /// <summary>
+        /// Event indicating the memory has changed as a result of editing.
+        /// </summary>
+        public event EventHandler? MemoryChanged;
 
         /// <summary>
         /// The caller-provided method for dispatching monitor events.
@@ -55,6 +60,14 @@ namespace MonitorControl
         void NotifyDebuggerStateChanged()
         {
             _dispatcher(() => DebuggerStateChanged?.Invoke(this, EventArgs.Empty));
+        }
+
+        /// <summary>
+        /// Sends a MemoryChanged notification.
+        /// </summary>
+        void NotifyMemoryChanged()
+        {
+            _dispatcher(() => MemoryChanged?.Invoke(this, EventArgs.Empty));
         }
 
         IViceMonitorClient _vice = new ViceMonitorClient();
@@ -201,7 +214,14 @@ namespace MonitorControl
                         break;
 
                     case "r":
-                        ShowRegisters(console);
+                        if (string.IsNullOrWhiteSpace(arguments))
+                        {
+                            ShowRegisters(console);
+                        }
+                        else
+                        {
+                            SetRegisters(arguments, console);
+                        }
                         break;
 
                     case "t":
@@ -218,6 +238,10 @@ namespace MonitorControl
 
                     case "db":
                         DumpMemoryBytes(arguments, console);
+                        break;
+
+                    case "eb":
+                        EditMemoryBytes(arguments, console);
                         break;
 
                     case "u":
@@ -294,6 +318,69 @@ namespace MonitorControl
 
             console.WriteLine($"A={regA:X2}  X={regX:X2}  Y={regY:X2}  SP={regSP:X2}  PC={regPC:X4}  Flags={regFlags:X2}  {flags}");
             DisassembleMemory($"{regPC:X4} l 1", console);
+        }
+
+        static readonly string[] _registerNames = [ "PC", "A", "X", "Y", "SP", "FL" ];
+        static readonly int[] _registerByteSizes = [ 2, 1, 1, 1, 1, 1 ];
+
+        async void SetRegisters(string argument, IConsoleOutput console)
+        {
+            // Validate that we have assignment arguments to process.
+            var args = argument.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (args.Length == 0)
+            {
+                console.WriteLine("Improperly-formatted register assignment list.");
+                return;
+            }
+
+            // Validate that the assignment arguments are valid.
+            List<(string RegName, UInt16 NewValue)> registerAssignments = [];
+            foreach (var arg in args)
+            {
+                var assignmentParts = arg.Split('=');
+                if (assignmentParts.Length != 2)
+                {
+                    console.WriteLine($"Improperly-formatted register assignment \"{arg}\".");
+                    return;
+                }
+
+                // Validate the register name.
+                var reg = assignmentParts[0].ToUpper();
+                var regIndex = _registerNames.IndexOf(reg);
+                if (regIndex == -1)
+                {
+                    console.WriteLine($"Invalid register name \"{reg}\".");
+                    return;
+                }
+
+                // Validate the value.
+                var valueArg = assignmentParts[1];
+                var newValue = (_registerByteSizes[regIndex] == 1) ? ParseByteValue(valueArg) : ParseWordValue(valueArg);
+                if (newValue != null)
+                {
+                    registerAssignments.Add((reg, newValue.Value));
+                }
+                else
+                {
+                    console.WriteLine($"Invalid value \"{valueArg}\" for register \"{reg}\".");
+                    return;
+                }
+            }
+
+            string? currentReg = null;
+            try
+            {
+                // Write the new register assignments.
+                foreach (var assignment in registerAssignments)
+                {
+                    currentReg = assignment.RegName;
+                    await _vice.SetRegisterAsync(assignment.RegName, assignment.NewValue);
+                }
+            }
+            catch
+            {
+                console.WriteLine($"Failed to write updated value for register {currentReg}");
+            }
         }
 
         void SetBreakpoint(string argument, IConsoleOutput console)
@@ -466,6 +553,114 @@ namespace MonitorControl
             else
             {
                 console.WriteLine("Could not read memory.");
+            }
+        }
+
+        async void EditMemoryBytes(string argument, IConsoleOutput console)
+        {
+            UInt16? address = null;
+            AddressSpace addressSpace = AddressSpace.Main;
+
+            var args = argument.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+
+            // Validate the presence of required arguments.
+            if (args.Length < 1)
+            {
+                console.WriteLine("Missing required arguments <address> and <new-value>.");
+                return;
+            }
+            else if (args.Length < 2)
+            {
+                console.WriteLine("Missing required argument <new-value>.");
+                return;
+            }
+
+            // Obtain the arguments and parse the address.
+            string addressArg = args[0];
+            string[] newValueArgs = args[1..];
+            address = GetAddress(addressArg, out var specifiedAddressSpace);
+            if (address != null)
+            {
+                if (specifiedAddressSpace != null)
+                {
+                    addressSpace = specifiedAddressSpace.Value;
+                }
+            }
+            else
+            {
+                console.WriteLine("Invalid address or symbol not found.");
+                return;
+            }
+
+            // Parse the collection of new values.
+            List<byte> newValues = [];
+            foreach (var arg in newValueArgs)
+            {
+                var value = ParseByteValue(arg);
+                if (value != null)
+                {
+                    newValues.Add(value.Value);
+                }
+                else
+                {
+                    console.WriteLine($"Invalid byte value \"{arg}\".");
+                    return;
+                }
+            }
+
+            // Write the new values to memory.
+            uint currentAddress = address.Value;
+            int bytesChangedCount = 0;
+            foreach (var value in newValues)
+            {
+                if (currentAddress <= 0x0000FFFF)
+                {
+                    if (await MemoryRegion.WriteViceByteAsync(value, (UInt16)currentAddress, _vice, addressSpace))
+                    {
+                        bytesChangedCount++;
+                        currentAddress++;
+                    }
+                    else
+                    {
+                        console.WriteLine($"Failed to write value {value:X2} to address {currentAddress:X4}.");
+                        break;
+                    }
+                }
+                else
+                {
+                    console.WriteLine($"Failed to write to address {currentAddress:X4}");
+                    break;
+                }
+            }
+
+            // Generate a notification if any bytes were changed.
+            if (bytesChangedCount > 0)
+            {
+                NotifyMemoryChanged();
+            }
+        }
+
+        byte? ParseByteValue(string byteValue)
+        {
+            if (byte.TryParse(byteValue, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var value))
+            {
+                return value;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        UInt16? ParseWordValue(string byteValue)
+        {
+            if (UInt16.TryParse(byteValue, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out var value))
+            {
+                return value;
+            }
+            else
+            {
+                return null;
             }
         }
 

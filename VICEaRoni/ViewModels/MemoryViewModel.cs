@@ -108,6 +108,7 @@ public partial class MemoryViewModel : ViewModelBase
     {
         _monitor = monitor;
         _monitor.DebuggerStateChanged += _monitor_DebuggerStateChanged;
+        _monitor.MemoryChanged += _monitor_MemoryChanged;
 
         if (!_monitor.IsStopped)
         {
@@ -116,6 +117,14 @@ public partial class MemoryViewModel : ViewModelBase
     }
 
     private async void _monitor_DebuggerStateChanged(object? sender, System.EventArgs e)
+    {
+        if (_monitor.IsStopped)
+        {
+            LoadMemoryValues();
+        }
+    }
+
+    private async void _monitor_MemoryChanged(object? sender, EventArgs e)
     {
         if (_monitor.IsStopped)
         {

@@ -33,8 +33,11 @@ namespace VICEaRoni.Views
             }
             else if (e.Key == Avalonia.Input.Key.Up)
             {
-                e.Handled = true;
-                _viewModel.SelectPreviousCommandAsync();
+                if (editCommand.CaretIndex == 0)
+                {
+                    e.Handled = true;
+                    _viewModel.SelectPreviousCommandAsync();
+                }
             }
             else if (e.Key == Avalonia.Input.Key.Escape)
             {

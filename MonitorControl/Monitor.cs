@@ -30,9 +30,14 @@ namespace MonitorControl
         public event EventHandler? DebuggerStateChanged;
 
         /// <summary>
-        /// Event indicating the memory has changed as a result of editing.
+        /// Event indicating that memory has changed as a result of editing.
         /// </summary>
         public event EventHandler? MemoryChanged;
+
+        /// <summary>
+        /// Event indicating that one or more registers have changed as a result of editing.
+        /// </summary>
+        public event EventHandler? RegistersChanged;
 
         /// <summary>
         /// The caller-provided method for dispatching monitor events.
@@ -40,6 +45,11 @@ namespace MonitorControl
         readonly Action<Action> _dispatcher;
 
         Disassembler _disassembler = new Disassembler();
+
+        /// <summary>
+        /// The collection of active breakpoints.
+        /// </summary>
+        List<Breakpoint> _breakpoints = [];
 
         /// <summary>
         /// Default constructor.
@@ -68,6 +78,14 @@ namespace MonitorControl
         void NotifyMemoryChanged()
         {
             _dispatcher(() => MemoryChanged?.Invoke(this, EventArgs.Empty));
+        }
+
+        /// <summary>
+        /// Sends a RegistersChanged notification.
+        /// </summary>
+        void NotifyRegistersChanged()
+        {
+            _dispatcher(() => RegistersChanged?.Invoke(this, EventArgs.Empty));
         }
 
         IViceMonitorClient _vice = new ViceMonitorClient();
@@ -367,7 +385,9 @@ namespace MonitorControl
                 }
             }
 
+
             string? currentReg = null;
+            int registersChangedCount = 0;
             try
             {
                 // Write the new register assignments.
@@ -375,43 +395,38 @@ namespace MonitorControl
                 {
                     currentReg = assignment.RegName;
                     await _vice.SetRegisterAsync(assignment.RegName, assignment.NewValue);
+                    registersChangedCount++;
                 }
             }
             catch
             {
                 console.WriteLine($"Failed to write updated value for register {currentReg}");
             }
+
+            // Generate a notification if any bytes were changed.
+            if (registersChangedCount > 0)
+            {
+                NotifyRegistersChanged();
+            }
         }
 
-        void SetBreakpoint(string argument, IConsoleOutput console)
+        async void SetBreakpoint(string argument, IConsoleOutput console)
         {
             var args = argument.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var addressArg = args.Length > 0 ? args[0] : null;
-            UInt16 address;
-            AddressSpace addressSpace = AddressSpace.Main;
 
             if (addressArg != null)
             {
-                var parsedAddress = GetAddress(addressArg, out var specifiedAddressSpace);
-                if (parsedAddress != null)
+                var result = await Breakpoint.CreateBreakpoint(addressArg, this, _vice);
+                if (result.Success)
                 {
-                    address = parsedAddress.Value;
-                    addressSpace = specifiedAddressSpace ?? AddressSpace.Main;
+                    var breakpoint = result.Data!;
+                    _breakpoints.Add(breakpoint);
+                    ShowBreakpointDetails(breakpoint, console);
                 }
                 else
                 {
-                    console.WriteLine("Invalid address or symbol not found.");
-                    return;
-                }
-
-                var checkpoint = _vice.SetCheckpointAsync(address).GetAwaiter().GetResult();
-                if (checkpoint != null)
-                {
-                    ShowCheckpointDetails(checkpoint, console);
-                }
-                else
-                {
-                    console.WriteLine("VICE checkpoint request failed.");
+                    console.WriteLine(result.Message!);
                 }
             }
         }
@@ -421,15 +436,44 @@ namespace MonitorControl
             console.WriteLine("Breakpoints");
 
             var checkpoints = _vice.GetCheckpointsAsync().GetAwaiter().GetResult();
-            foreach (var checkpoint in checkpoints)
+            var checkpointNumbers = checkpoints.Select(c => c.Number).Union(_breakpoints.Select(b => b.ID)).OrderDescending().ToArray();
+
+            foreach (var number in checkpointNumbers)
             {
-                ShowCheckpointDetails(checkpoint, console);
+                var breakpoint = _breakpoints.FirstOrDefault(b => b.ID == number);
+                if (breakpoint != null)
+                {
+                    ShowBreakpointDetails(breakpoint, console);
+                }
+                else
+                {
+                    var checkpoint = checkpoints.FirstOrDefault(c => c.Number == number);
+                    if (checkpoint != null)
+                    {
+                        ShowCheckpointDetails(checkpoint, console);
+                    }
+                    else
+                    {
+                        console.WriteLine($"    {number}: ??");
+                    }
+                }
             }
         }
 
         void ShowCheckpointDetails(ViceCheckpoint checkpoint, IConsoleOutput console)
         {
-            console.WriteLine($"    {checkpoint.Number}: {checkpoint.Operation} {checkpoint.StartAddress:X4}");
+            string condition = string.Empty;
+
+            if (checkpoint.HasCondition)
+            {
+                condition = " (has unknown condition)";
+            }
+            console.WriteLine($"    {checkpoint.Number}: {checkpoint.Operation} {checkpoint.StartAddress:X4}{condition}");
+        }
+
+        void ShowBreakpointDetails(Breakpoint breakpoint, IConsoleOutput console)
+        {
+            console.WriteLine($"    {breakpoint.ID}: {breakpoint.Operation} {breakpoint.SymbolOrAddress} {breakpoint.Condition}");
         }
 
         async Task TraceInstruction(IConsoleOutput console)
@@ -784,13 +828,14 @@ namespace MonitorControl
             _symbolTable.ClearSymbols();
         }
 
+
         public UInt16? GetAddress(string symbolOrAddress)
         {
             var address = GetAddress(symbolOrAddress, out _);
             return address;
         }
 
-        UInt16? GetAddress(string symbolOrAddress, out AddressSpace? addressSpace)
+        public UInt16? GetAddress(string symbolOrAddress, out AddressSpace? addressSpace)
         {
             addressSpace = AddressSpace.Main;
 

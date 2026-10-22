@@ -42,6 +42,7 @@ public partial class RegisterViewModel : ViewModelBase
     {
         _monitor = monitor;
         _monitor.DebuggerStateChanged += _monitor_DebuggerStateChanged;
+        _monitor.RegistersChanged += _monitor_RegistersChanged;
 
         if (!_monitor.IsStopped)
         {
@@ -50,6 +51,14 @@ public partial class RegisterViewModel : ViewModelBase
     }
 
     private async void _monitor_DebuggerStateChanged(object? sender, System.EventArgs e)
+    {
+        if (_monitor.IsStopped)
+        {
+            await LoadRegisterValues();
+        }
+    }
+
+    private async void _monitor_RegistersChanged(object? sender, EventArgs e)
     {
         if (_monitor.IsStopped)
         {
